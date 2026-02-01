@@ -9,7 +9,7 @@ from a2a.utils import get_message_text, new_agent_text_message
 
 
 ALLOWED_LABELS = {"WAC", "SAC", "WTC", "STC", "WCC", "SCC"}
-DEFAULT_LABEL = "SAC"
+DEFAULT_LABEL = "Error - no LLM configured"
 DEFAULT_TIMEOUT = 30.0
 
 
