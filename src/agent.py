@@ -122,13 +122,15 @@ class Agent:
             from openai import AsyncOpenAI
             
             self.model = os.environ.get("LLM_MODEL", "grok-4")
+            api_base = os.environ.get("XAI_API_BASE", "https://api.x.ai/v1")  # Default but configurable
+            
             self.client = AsyncOpenAI(
                 api_key=api_key,
-                base_url="https://api.x.ai/v1",
+                base_url=api_base,
                 timeout=self.timeout,
             )
             self.provider = Provider.XAI
-            print(f"INFO: xAI Grok provider configured - model: {self.model}")
+            print(f"INFO: xAI Grok provider configured - model: {self.model}, base: {api_base}")
             
         except ImportError:
             print("ERROR: openai package not installed. Run: pip install openai")
