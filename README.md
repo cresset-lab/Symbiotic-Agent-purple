@@ -1,87 +1,94 @@
-# A2A Agent Template
+# RIT Detection Baseline Purple Agent
 
-A minimal template for building [A2A (Agent-to-Agent)](https://a2a-protocol.org/latest/) agents.
+This document lists **all environment variables read by `agent.py`** and how they affect provider selection, model choice, and request behavior.
 
-## Project Structure
+---
 
-```
-src/
-├─ server.py      # Server setup and agent card configuration
-├─ executor.py    # A2A request handling
-├─ agent.py       # Your agent implementation goes here
-└─ messenger.py   # A2A messaging utilities
-tests/
-└─ test_agent.py  # Agent tests
-Dockerfile        # Docker configuration
-pyproject.toml    # Python dependencies
-.github/
-└─ workflows/
-   └─ test-and-publish.yml # CI workflow
-```
+## Provider auto-detection (priority order)
 
-## Getting Started
+The agent checks API keys in this exact order and picks the **first** one it finds:
 
-1. **Create your repository** - Click "Use this template" to create your own repository from this template
+1. `ANTHROPIC_API_KEY` → Anthropic
+2. `GOOGLE_API_KEY` → Google Gemini
+3. `XAI_API_KEY` → xAI Grok
+4. `OPENAI_API_KEY` **or** `LLM_API_KEY` → OpenAI-compatible (OpenAI / OpenRouter / other compatible endpoints)
 
-2. **Implement your agent** - Add your agent logic to [`src/agent.py`](src/agent.py)
+If **no key is found**, the agent runs in **test mode** and returns the default label `"Error - no LLM configured"` for every request.
 
-3. **Configure your agent card** - Fill in your agent's metadata (name, skills, description) in [`src/server.py`](src/server.py)
+---
 
-4. **Write your tests** - Add custom tests for your agent in [`tests/test_agent.py`](tests/test_agent.py)
+## Supported environment variables
 
-For a concrete example of implementing an agent using this template, see this [draft PR](https://github.com/RDI-Foundation/agent-template/pull/8).
+### API keys (pick one provider)
+- **`ANTHROPIC_API_KEY`**
+  - What it does: Enables **Anthropic** provider.
+  - Default: *(unset)*
+  - Notes: If set, it overrides all other keys due to priority order.
 
-## Running Locally
+- **`GOOGLE_API_KEY`**
+  - What it does: Enables **Google Gemini** provider.
+  - Default: *(unset)*
 
-```bash
-# Install dependencies
-uv sync
+- **`XAI_API_KEY`**
+  - What it does: Enables **xAI Grok** provider.
+  - Default: *(unset)*
 
-# Run the server
-uv run src/server.py
-```
+- **`OPENAI_API_KEY`**
+  - What it does: Enables **OpenAI-compatible** provider.
+  - Default: *(unset)*
+  - Notes: Used only if no Anthropic/Google/xAI key is present.
 
-## Running with Docker
+- **`LLM_API_KEY`**
+  - What it does: Fallback API key for OpenAI-compatible provider if `OPENAI_API_KEY` is not set.
+  - Default: *(unset)*
+  - Notes: Same behavior as `OPENAI_API_KEY` for this agent.
 
-```bash
-# Build the image
-docker build -t my-agent .
+---
 
-# Run the container
-docker run -p 9009:9009 my-agent
-```
+### Model selection
+- **`LLM_MODEL`**
+  - What it does: Overrides the model name used by the selected provider.
+  - Default (depends on provider):
+    - Anthropic: `claude-sonnet-4-20250514`
+    - Google: `gemini-2.5-pro`
+    - xAI: `grok-4`
+    - OpenAI-compatible: `gpt-4o`
+  - Example:
+    - `LLM_MODEL="some-model-name"`
 
-## Testing
+---
 
-Run A2A conformance tests against your agent.
+### Base URL / endpoint (OpenAI-compatible only)
+These only matter when the selected provider is **OpenAI-compatible**.
 
-```bash
-# Install test dependencies
-uv sync --extra test
+- **`OPENAI_API_BASE`**
+  - What it does: Sets a custom base URL for the OpenAI-compatible client.
+  - Default: *(unset → library default base URL is used)*
+  - Example:
+    - `OPENAI_API_BASE=https://your-openai-compatible-host/v1`
 
-# Start your agent (uv or docker; see above)
+- **`LLM_API_BASE`**
+  - What it does: Fallback base URL if `OPENAI_API_BASE` is not set.
+  - Default: *(unset)*
+  - Example:
+    - `LLM_API_BASE=https://your-openai-compatible-host/v1`
 
-# Run tests against your running agent URL
-uv run pytest --agent-url http://localhost:9009
-```
+**Important:** For xAI, the base URL is hardcoded to `https://api.x.ai/v1` in the code; `OPENAI_API_BASE/LLM_API_BASE` do **not** override it.
 
-## Publishing
+---
 
-The repository includes a GitHub Actions workflow that automatically builds, tests, and publishes a Docker image of your agent to GitHub Container Registry.
+### Timeouts
+- **`LLM_TIMEOUT`**
+  - What it does: Sets request timeout in **seconds** (float).
+  - Default: `200.0`
+  - Example:
+    - `LLM_TIMEOUT=120`
 
-If your agent needs API keys or other secrets, add them in Settings → Secrets and variables → Actions → Repository secrets. They'll be available as environment variables during CI tests.
+---
 
-- **Push to `main`** → publishes `latest` tag:
-```
-ghcr.io/<your-username>/<your-repo-name>:latest
-```
+## Example input in the benchmark scenario.yml
 
-- **Create a git tag** (e.g. `git tag v1.0.0 && git push origin v1.0.0`) → publishes version tags:
-```
-ghcr.io/<your-username>/<your-repo-name>:1.0.0
-ghcr.io/<your-username>/<your-repo-name>:1
-```
-
-Once the workflow completes, find your Docker image in the Packages section (right sidebar of your repository). Configure the package visibility in package settings.
-
-> **Note:** Organization repositories may need package write permissions enabled manually (Settings → Actions → General). Version tags must follow [semantic versioning](https://semver.org/) (e.g., `v1.0.0`).
+[[participants]]
+agentbeats_id = "019c1788-faf4-7170-9953-a84321132e16"
+name = "agent"
+env = {LLM_API_KEY = "${LLM_API_KEY}", LLM_API_BASE = "https://api.tokenfactory.nebius.com/v1/", LLM_MODEL = "deepseek-ai/DeepSeek-V3.2"}
