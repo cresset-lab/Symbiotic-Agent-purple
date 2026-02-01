@@ -17,6 +17,7 @@ class Provider(Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
+    XAI = "xai"
     NONE = "none"
 
 
@@ -27,9 +28,10 @@ class Agent:
     Supported providers (checked in order):
     - Anthropic: ANTHROPIC_API_KEY
     - Google Gemini: GOOGLE_API_KEY
+    - xAI Grok: XAI_API_KEY
     - OpenAI/OpenRouter: OPENAI_API_KEY or LLM_API_KEY
     
-    Without API key: returns "SAC" for all requests (test mode)
+    Without API key: returns default label for all requests (test mode)
     """
     
     def __init__(self):
@@ -53,6 +55,12 @@ class Agent:
         google_key = os.environ.get("GOOGLE_API_KEY")
         if google_key:
             self._setup_google(google_key)
+            return
+        
+        # Check xAI Grok
+        xai_key = os.environ.get("XAI_API_KEY")
+        if xai_key:
+            self._setup_xai(xai_key)
             return
         
         # Check OpenAI / OpenRouter / generic LLM_API_KEY
@@ -108,6 +116,23 @@ class Agent:
         except ImportError:
             print("ERROR: google-genai package not installed. Run: pip install google-genai")
 
+    def _setup_xai(self, api_key: str):
+        """Initialize xAI Grok client (OpenAI-compatible endpoint)."""
+        try:
+            from openai import AsyncOpenAI
+            
+            self.model = os.environ.get("LLM_MODEL", "grok-4")
+            self.client = AsyncOpenAI(
+                api_key=api_key,
+                base_url="https://api.x.ai/v1",
+                timeout=self.timeout,
+            )
+            self.provider = Provider.XAI
+            print(f"INFO: xAI Grok provider configured - model: {self.model}")
+            
+        except ImportError:
+            print("ERROR: openai package not installed. Run: pip install openai")
+
     def _parse_payload(self, text: str) -> tuple[str, str]:
         """Parse Green Agent payload format."""
         rules_match = re.search(
@@ -158,7 +183,7 @@ class Agent:
             ],
             max_tokens=50,
             temperature=0,
-            timeout=self.timeout,  # Explicit per-request timeout
+            timeout=self.timeout,
         )
         return response.choices[0].message.content or ""
 
@@ -171,7 +196,7 @@ class Agent:
             max_tokens=50,
             system=system_msg,
             messages=[{"role": "user", "content": user_msg}],
-            timeout=self.timeout,  # Explicit per-request timeout
+            timeout=self.timeout,
         )
         return response.content[0].text if response.content else ""
 
@@ -193,11 +218,27 @@ class Agent:
                         contents=full_prompt,
                     )
                 ),
-                timeout=self.timeout,  # Explicit timeout
+                timeout=self.timeout,
             )
             return response.text if response.text else ""
         except asyncio.TimeoutError:
             raise TimeoutError(f"Google Gemini request timed out after {self.timeout}s")
+
+    async def _classify_xai(self, prompt: str, ruleset: str) -> str:
+        """Classify using xAI Grok API (OpenAI-compatible)."""
+        system_msg, user_msg = self._build_messages(prompt, ruleset)
+        
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
+            ],
+            max_tokens=50,
+            temperature=0,
+            timeout=self.timeout,
+        )
+        return response.choices[0].message.content or ""
 
     async def _classify(self, prompt: str, ruleset: str) -> str:
         """Route to appropriate provider and handle response."""
@@ -211,6 +252,8 @@ class Agent:
                 result = await self._classify_anthropic(prompt, ruleset)
             elif self.provider == Provider.GOOGLE:
                 result = await self._classify_google(prompt, ruleset)
+            elif self.provider == Provider.XAI:
+                result = await self._classify_xai(prompt, ruleset)
             else:
                 return DEFAULT_LABEL
             
@@ -227,7 +270,7 @@ class Agent:
             return DEFAULT_LABEL
 
     async def run(self, message: Message, updater: TaskUpdater) -> None:
-        """Handle incoming requests."""
+        """Handle incoming classification requests."""
         input_text = get_message_text(message)
         
         # Health check
@@ -246,7 +289,7 @@ class Agent:
             )
             return
         
-        # Real classification
+        # Classification request
         await updater.update_status(
             TaskState.working, 
             new_agent_text_message(f"Classifying with {self.provider.value}/{self.model}...")
