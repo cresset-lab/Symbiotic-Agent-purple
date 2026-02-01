@@ -10,7 +10,7 @@ from a2a.utils import get_message_text, new_agent_text_message
 
 ALLOWED_LABELS = {"WAC", "SAC", "WTC", "STC", "WCC", "SCC"}
 DEFAULT_LABEL = "Error - no LLM configured"
-DEFAULT_TIMEOUT = 30.0
+DEFAULT_TIMEOUT = 200.0  # seconds
 
 
 class Provider(Enum):
@@ -163,11 +163,7 @@ class Agent:
 
     def _build_messages(self, prompt: str, ruleset: str) -> tuple[str, str]:
         """Build system and user messages for classification."""
-        system_msg = (
-            "You are an expert at classifying openHAB rules for Rule Interaction Threats (RIT). "
-            "Respond with exactly one label: WAC, SAC, WTC, STC, WCC, or SCC. "
-            "Output only the label, nothing else."
-        )
+        system_msg = ("Follow the user message completely.")
         user_msg = f"{prompt}\n\nRuleset:\n{ruleset}" if prompt else f"Classify this ruleset:\n{ruleset}"
         return system_msg, user_msg
 
@@ -261,13 +257,15 @@ class Agent:
             if label:
                 return label
             
-            # Could not parse valid label - log and return default
+            # Could not parse valid label - log and return error message with actual response
             print(f"WARN: Could not parse label from LLM response: {result[:100]}")
-            return DEFAULT_LABEL
+            truncated_response = result[:200] if result else "(empty response)"
+            return f"No valid label from {self.model}: {truncated_response}"
             
         except Exception as e:
-            print(f"ERROR: LLM call failed ({self.provider.value}): {e}")
-            return DEFAULT_LABEL
+            error_msg = str(e)
+            print(f"ERROR: LLM call failed ({self.provider.value}): {error_msg}")
+            return f"Error from {self.model}: {error_msg}"
 
     async def run(self, message: Message, updater: TaskUpdater) -> None:
         """Handle incoming classification requests."""
