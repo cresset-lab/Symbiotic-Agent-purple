@@ -86,9 +86,11 @@ These only matter when the selected provider is **OpenAI-compatible**.
 
 ---
 
-## Example input in the benchmark scenario.yml
+## Example input in the benchmark scenario.toml
 
 [[participants]]
 agentbeats_id = "019c1788-faf4-7170-9953-a84321132e16"
 name = "agent"
 env = {LLM_API_KEY = "${LLM_API_KEY}", LLM_API_BASE = "https://api.tokenfactory.nebius.com/v1/", LLM_MODEL = "deepseek-ai/DeepSeek-V3.2"}
+
+---
